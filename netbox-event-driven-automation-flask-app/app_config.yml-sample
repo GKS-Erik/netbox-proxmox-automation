@@ -7,6 +7,11 @@ proxmox_api_config:
   api_token_id: name_of_proxmox_api_token
   api_token_secret: proxmox_api_secret_token
   verify_ssl: false
+  # Used only when a new VM/LXC has no assigned NetBox device.
+  # default_node: optional-proxmox-node-name
+  task_timeout_seconds: 600
+  # Optional; prefer proxmox_public_ssh_key for LXC provisioning.
+  # lxc_default_password: use-a-secret-value
 netbox_api_config:
   api_proto: http # or https
   api_host: name or ip of NetBox host

@@ -1,268 +1,152 @@
-import os
 import logging
-import json
-import yaml
+import os
+from datetime import UTC, datetime
+from pathlib import Path
+from threading import Lock
 
-from datetime import datetime
-
-# adapted from: https://majornetwork.net/2019/10/webhook-listener-for-netbox/
-
-from helpers.netbox_proxmox import NetBoxProxmoxHelper, NetBoxProxmoxHelperVM, NetBoxProxmoxHelperLXC, NetBoxProxmoxHelperMigrate
-
-from flask import Flask, Response, request, jsonify
+import requests
+from flask import Flask, jsonify, request
 from flask_restx import Api, Resource, fields
+from proxmoxer import ResourceException
+from pydantic import ValidationError
 
-VERSION = '2025.11.01'
+from backends import BackendFactory
+from backends.base import UnsupportedOperationError
+from clients import GuestNotFoundError, NetBoxClient, ProxmoxClient, ProxmoxTaskError
+from config import AppConfig, load_config
+from models import parse_webhook
+from services.vm_service import AutomationService
 
-app_config_file = 'app_config.yml'
-
-with open(app_config_file) as yaml_cfg:
-    try:
-        app_config = yaml.safe_load(yaml_cfg)
-    except yaml.YAMLError as exc:
-        print(exc)
-
-if not 'netbox_webhook_name' in app_config:
-    raise ValueError(f"'netbox_webhook_name' missing in {app_config_file}")
-
-app = Flask(__name__)
-api = Api(app, version=VERSION, title="NetBox-Proxmox Webhook Listener",
-        description="NetBox-Proxmox Webhook Listener")
-ns = api.namespace(app_config['netbox_webhook_name'])
-
+VERSION = "2026.08.11"
 APP_NAME = "netbox-proxmox-webhook-listener"
 
-DEBUG = app.debug
 
-logger = logging.getLogger(APP_NAME)
-if DEBUG:
-    logger.setLevel(logging.DEBUG)
-else:
-  logger.setLevel(logging.DEBUG)
-
-formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s")
-file_logging = logging.FileHandler("{}.log".format(APP_NAME))
-file_logging.setFormatter(formatter)
-logger.addHandler(file_logging)
-
-stream_logging = logging.StreamHandler()
-stream_logging.setFormatter(formatter)
-logger.addHandler(stream_logging)
-
-logger.debug("Pew pew")
-
-webhook_request = api.model("Webhook request from NetBox", {
-    'username': fields.String,
-    'data': fields.Raw(description="Object data from NetBox"),
-    'event': fields.String,
-    'timestamp': fields.String,
-    'model': fields.String,
-    'request_id': fields.String,
-})
-
-# For session logging, c/o sol1
-session = {
-  'name': "netbox-webhook-flask-app",
-  'version': VERSION,
-  'version_lastrun': VERSION,
-  'server_start': "",
-  'status': {
-    'requests': 0,
-    'last_called': ""
-  },
-}
+def build_service(config: AppConfig) -> AutomationService:
+    proxmox = ProxmoxClient(config.proxmox_api_config)
+    netbox = NetBoxClient(config.netbox_api_config)
+    backends = BackendFactory(proxmox, netbox, config.proxmox_api_config)
+    return AutomationService(backends, netbox)
 
 
-@ns.route("/status/", methods=['GET'])
-class WebhookListener(Resource):
-    @ns.expect(webhook_request)
+def create_app(
+    config: AppConfig | None = None,
+    service: AutomationService | None = None,
+) -> Flask:
+    config_path = Path(
+        os.environ.get("APP_CONFIG_FILE", Path(__file__).with_name("app_config.yml"))
+    )
+    config = config or load_config(config_path)
+    service = service or build_service(config)
 
-    def get(self):
-        _session = session.copy()
-        _session['version_lastrun'] = VERSION
-        _session['status']['requests'] += 1
-        _session['status']['last_called'] = datetime.now()
-        sanitized_full_path = request.full_path.replace('\r\n', '').replace('\n', '')
-        sanitized_remote_addr = request.remote_addr.replace('\r\n', '').replace('\n', '') if request.remote_addr else 'Unknown'
-        sanitized_data = request.get_data(as_text=True).replace('\r\n', '').replace('\n', '') if request.get_data() else ''
-        logger.info(f"{sanitized_full_path}, {sanitized_remote_addr}, Status request with data {sanitized_data}")
-        return jsonify(_session)
+    flask_app = Flask(__name__)
+    api = Api(
+        flask_app,
+        version=VERSION,
+        title="NetBox-Proxmox Webhook Listener",
+        description="NetBox-Proxmox Webhook Listener",
+    )
+    namespace = api.namespace(config.netbox_webhook_name)
+    logger = _configure_logging(flask_app.debug)
 
+    state = {
+        "server_start": datetime.now(UTC),
+        "requests": 0,
+        "last_called": None,
+    }
+    state_lock = Lock()
 
-# For handling event rules
-@ns.route("/")
-class WebhookListener(Resource):
-    @ns.expect(webhook_request)
-    def post(self):
-        try:
-            webhook_json_data = request.json
-        except:
-            webhook_json_data = {}
+    webhook_request = api.model(
+        "Webhook request from NetBox",
+        {
+            "data": fields.Raw(required=True, description="Object data from NetBox"),
+            "event": fields.String(required=True),
+            "model": fields.String,
+            "object_type": fields.String,
+            "snapshots": fields.Raw,
+        },
+    )
 
-        sanitized_data = json.dumps(webhook_json_data, separators = (',', ':'))
-        logger.info("User-provided data: %s", sanitized_data)
+    @namespace.route("/status/")
+    class StatusResource(Resource):
+        def get(self):
+            with state_lock:
+                state["requests"] += 1
+                state["last_called"] = datetime.now(UTC)
+                response = {
+                    "name": APP_NAME,
+                    "version": VERSION,
+                    "server_start": state["server_start"].isoformat(),
+                    "status": {
+                        "requests": state["requests"],
+                        "last_called": state["last_called"].isoformat(),
+                    },
+                }
+            return jsonify(response)
 
-        if not webhook_json_data or "event" not in webhook_json_data or "data" not in webhook_json_data:
-            logger.error("Invalid input")
-            return {"result":"invalid input"}, 400
+    @namespace.route("/")
+    class WebhookResource(Resource):
+        @namespace.expect(webhook_request)
+        def post(self):
+            payload = request.get_json(silent=True)
+            if payload is None:
+                return {"result": "Request body must contain JSON"}, 400
 
-        event = webhook_json_data["event"]
-        data = webhook_json_data["data"]
+            logger.info(
+                "NetBox webhook received",
+                extra={
+                    "event": payload.get("event"),
+                    "object_type": payload.get("object_type") or payload.get("model"),
+                    "request_id": payload.get("request_id"),
+                },
+            )
 
-        if "snapshots" in webhook_json_data:
-            snapshots = webhook_json_data["snapshots"]
-
-        if "model" in webhook_json_data:
-            model = webhook_json_data["model"]
-        else:
             try:
-                object_type = webhook_json_data["object_type"]
-            except:
-                logger.error("Attributes model or object_type missing from input")
-                return {"result": "missing model/object_type"}, 400
+                event = parse_webhook(payload)
+                results = service.handle(event)
+            except ValidationError as exc:
+                logger.warning("Invalid NetBox webhook: %s", exc)
+                return {"result": "Invalid NetBox webhook", "errors": exc.errors()}, 400
+            except (ValueError, LookupError, GuestNotFoundError, UnsupportedOperationError) as exc:
+                logger.warning("Unable to process NetBox webhook: %s", exc)
+                return {"result": str(exc)}, 409
+            except (ProxmoxTaskError, TimeoutError) as exc:
+                logger.error("Proxmox task failed: %s", exc)
+                return {"result": str(exc)}, 502
+            except ResourceException as exc:
+                message = getattr(exc, "content", str(exc))
+                logger.exception("Proxmox API request failed")
+                return {"result": message}, 502
+            except requests.RequestException as exc:
+                logger.exception("API connection failed")
+                return {"result": f"API connection failed: {exc}"}, 502
+            except Exception:
+                logger.exception("Unexpected webhook processing error")
+                return {"result": "Unexpected webhook processing error"}, 500
 
-            model = object_type.rsplit(".", 1)[-1]
+            if not results:
+                return {"result": "No operation required"}, 200
+            return {
+                "result": results[-1].message,
+                "operations": [
+                    {"operation": result.operation.value, "message": result.message}
+                    for result in results
+                ],
+            }, 200
 
-        results = (500, {'result': 'Default error message (obviously something has gone wrong)'})
+    return flask_app
 
-        if model == 'virtualmachine':
-            if not 'device' in data:
-                logger.error("Attribute device missing from input")
-                return {"result":"Missing device (Proxmox node)"}, 400
 
-            proxmox_node = data['device']
+def _configure_logging(debug: bool) -> logging.Logger:
+    logger = logging.getLogger(APP_NAME)
+    logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+        logger.addHandler(handler)
+    return logger
 
-            if 'cluster' in data:
-                cluster = data['cluster']
 
-            if not 'proxmox_vm_type' in data['custom_fields'] or data['custom_fields']['proxmox_vm_type'] == 'vm':
-                tc = NetBoxProxmoxHelperVM(app_config, proxmox_node, DEBUG)
-
-                if data['status']['value'] == 'staged':
-                    if event == 'created':
-                        results = tc.proxmox_clone_vm(webhook_json_data)
-                    elif event == 'updated':
-                        results = tc.proxmox_update_vm_vcpus_and_memory(webhook_json_data)
-
-                        if data['primary_ip'] and data['primary_ip']['address']:
-                            results = tc.proxmox_set_ipconfig0(webhook_json_data)
-
-                        if 'proxmox_public_ssh_key' in data['custom_fields'] and data['custom_fields']['proxmox_public_ssh_key']:
-                            results = tc.proxmox_set_ssh_public_key(webhook_json_data)
-                    elif event == 'deleted':
-                        results = tc.proxmox_delete_vm(webhook_json_data)
-
-                elif event == 'updated':
-                    if data['status']['value'] == 'offline':
-                        logger.debug('Stoppen met dat ding')
-                        if (data['status']['value'] != snapshots['prechange']['status']) and (proxmox_node['id'] == snapshots['prechange']['device']):
-                            results = tc.proxmox_stop_vm(webhook_json_data)
-
-                        if proxmox_node['id'] != snapshots['prechange']['device']:
-                            proxmox_vmid = int(data['serial'])
-                            source_node = snapshots['prechange']['device']
-                            target_node = proxmox_node
-
-                            pxmx_migrate = NetBoxProxmoxHelperMigrate(app_config, None, DEBUG)
-
-                            results = pxmx_migrate.migrate_vm(proxmox_vmid, source_node, target_node)
-
-                    elif data['status']['value'] == 'active':
-                        if (data['status']['value'] != snapshots['prechange']['status']) and (proxmox_node['id'] == snapshots['prechange']['device']):
-                            results = tc.proxmox_start_vm(webhook_json_data)
-
-                        if proxmox_node['id'] != snapshots['prechange']['device']:
-                            proxmox_vmid = int(data['serial'])
-                            source_node = snapshots['prechange']['device']
-                            target_node = proxmox_node['id']
-
-                            pxmx_migrate = NetBoxProxmoxHelperMigrate(app_config, None, DEBUG)
-
-                            results = pxmx_migrate.migrate_vm(proxmox_vmid, source_node, target_node)
-                    else:
-                        results = (500, {'result': f"Unknown value {data['status']['value']}"})
-
-                elif event == 'deleted':
-                    results = tc.proxmox_delete_vm(webhook_json_data)
-
-            elif data['custom_fields']['proxmox_vm_type'] == 'lxc':
-                tc = NetBoxProxmoxHelperLXC(app_config, proxmox_node, DEBUG)
-
-                if data['status']['value'] == 'staged':
-                    logger.debug(f"LXC STAGED INPUT {data}", event)
-
-                    if event == 'created':
-                        results = tc.proxmox_create_lxc(webhook_json_data)
-
-                    elif event == 'updated':
-                        if data['primary_ip'] and data['primary_ip']['address']:
-                            results = tc.proxmox_lxc_set_net0(webhook_json_data)
-
-                        if (snapshots['prechange']['vcpus'] != snapshots['postchange']['vcpus']) or (snapshots['prechange']['memory'] != snapshots['postchange']['memory']):
-                            results = tc.proxmox_update_lxc_vpus_and_memory(webhook_json_data)
-                        else:
-                            results = (200, {'result': 'No resources to change'})
-
-                    elif event == 'deleted':
-                        results = tc.proxmox_delete_lxc(webhook_json_data)
-
-                elif event == 'updated':
-                    if data['status']['value'] == 'offline':
-                        results = tc.proxmox_stop_lxc(webhook_json_data)
-                    elif data['status']['value'] == 'active':
-                        results = tc.proxmox_start_lxc(webhook_json_data)
-                    else:
-                        results = (500, {'result': f"Unknown value {data['status']['value']}"})
-
-                elif event == 'deleted':
-                    results = tc.proxmox_delete_lxc(webhook_json_data)
-
-                else:
-                    results = (500, {'result': f"Unknown event: {event}"})
-
-        elif model == 'virtualdisk':
-            results = 500, {'result': 'Something has gone wrong with virtualdisk management'}
-            is_lxc = False
-
-            if data['name'] == 'rootfs':
-                is_lxc = True
-
-            logger.debug("HERE VIRTUALDISK", is_lxc)
-
-            tcall = NetBoxProxmoxHelper(app_config, None, DEBUG)
-            proxmox_node = tcall.netbox_get_proxmox_node_from_vm_id(data['virtual_machine']['id'])
-
-            if is_lxc:
-                logger.debug("change disk lxc")
-
-                if event == 'updated':
-                    if snapshots['prechange']['size'] != snapshots['postchange']['size']:
-                        tc = NetBoxProxmoxHelperLXC(app_config, proxmox_node, DEBUG)
-                        results = tc.proxmox_lxc_resize_disk(webhook_json_data)
-
-                elif event == 'deleted':
-                    results = 200, {'result': 'All good'}
-
-            else:
-                tc = NetBoxProxmoxHelperVM(app_config, proxmox_node, DEBUG)
-
-                if event == 'created':
-                    results = tc.proxmox_add_disk(webhook_json_data)
-                elif event == 'updated':
-                    results = tc.proxmox_resize_disk(webhook_json_data)
-                elif event == 'deleted':
-                    results = tc.proxmox_delete_disk(webhook_json_data)
-
-        logger.debug("Results: %s", json.dumps(results))
-
-        response = Response(
-            json.dumps(results[1]),
-            status = results[0],
-            mimetype = 'application/json'
-        )
-        logger.debug(response)
-
-        return response
+app = create_app()
 
 
 if __name__ == "__main__":

@@ -171,6 +171,8 @@ vms.yml.*
 
 inventory
 tests/
+!netbox-event-driven-automation-flask-app/tests/
+!netbox-event-driven-automation-flask-app/tests/**
 
 app_config.yml
 netbox_setup_custom_fields.yml
