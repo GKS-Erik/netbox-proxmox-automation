@@ -52,6 +52,34 @@ class WebhookParsingTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             parse_webhook(payload)
 
+    def test_created_vm_accepts_null_prechange_snapshot(self):
+        payload = vm_payload(
+            status={"value": "staged"},
+            serial=None,
+            custom_fields={
+                "proxmox_vm_type": "vm",
+                "proxmox_vm_templates": 9000,
+                "proxmox_vm_storage": "local-lvm",
+            },
+        )
+        payload["event"] = "created"
+        payload["snapshots"] = {
+            "prechange": None,
+            "postchange": {"status": "staged", "device": 7},
+        }
+
+        event = parse_webhook(payload)
+
+        self.assertIsInstance(event, VirtualMachineEvent)
+        self.assertIsNone(event.snapshots.prechange)
+
+    def test_updated_vm_still_requires_prechange_snapshot(self):
+        payload = vm_payload()
+        payload["snapshots"]["prechange"] = None
+
+        with self.assertRaises(ValidationError):
+            parse_webhook(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -33,10 +33,13 @@ class EventDispatcher:
             return operations
 
         status_changed = bool(
-            event.snapshots and event.snapshots.prechange.status != vm.status.value
+            event.snapshots
+            and event.snapshots.prechange
+            and event.snapshots.prechange.status != vm.status.value
         )
         node_changed = bool(
             event.snapshots
+            and event.snapshots.prechange
             and vm.device
             and event.snapshots.prechange.device != vm.device.id
         )
@@ -62,6 +65,6 @@ class EventDispatcher:
         if event.event is EventType.DELETED:
             return [Operation.DELETE_DISK]
         if event.event is EventType.UPDATED:
-            if not event.snapshots or event.snapshots.prechange.size != event.snapshots.postchange.size:
+            if event.snapshots.prechange.size != event.snapshots.postchange.size:
                 return [Operation.RESIZE_DISK]
         return []

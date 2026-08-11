@@ -106,8 +106,8 @@ class VmSnapshot(BaseModel):
 class Snapshots(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    prechange: VmSnapshot
-    postchange: VmSnapshot
+    prechange: VmSnapshot | None = None
+    postchange: VmSnapshot | None = None
 
 
 class VirtualMachineEvent(BaseModel):
@@ -117,6 +117,14 @@ class VirtualMachineEvent(BaseModel):
     event: EventType
     data: VirtualMachine
     snapshots: Snapshots | None = None
+
+    @model_validator(mode="after")
+    def updated_event_requires_prechange(self) -> "VirtualMachineEvent":
+        if self.event is EventType.UPDATED and (
+            self.snapshots is None or self.snapshots.prechange is None
+        ):
+            raise ValueError("Updated VM event requires a prechange snapshot")
+        return self
 
 
 class VirtualMachineRef(BaseModel):
@@ -145,8 +153,8 @@ class DiskSnapshot(BaseModel):
 class DiskSnapshots(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    prechange: DiskSnapshot
-    postchange: DiskSnapshot
+    prechange: DiskSnapshot | None = None
+    postchange: DiskSnapshot | None = None
 
 
 class DiskEvent(BaseModel):
@@ -156,6 +164,16 @@ class DiskEvent(BaseModel):
     event: EventType
     data: VirtualDisk
     snapshots: DiskSnapshots | None = None
+
+    @model_validator(mode="after")
+    def updated_event_requires_snapshots(self) -> "DiskEvent":
+        if self.event is EventType.UPDATED and (
+            self.snapshots is None
+            or self.snapshots.prechange is None
+            or self.snapshots.postchange is None
+        ):
+            raise ValueError("Updated disk event requires prechange and postchange snapshots")
+        return self
 
 
 WebhookEvent = VirtualMachineEvent | DiskEvent
