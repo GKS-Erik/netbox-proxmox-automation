@@ -13,6 +13,14 @@ class NetBoxProxmoxHelper:
     def __init__(self, cfg_data, proxmox_node, debug=False):
         self.debug = debug
 
+        # NetBox serializes an assigned device as an object.  Proxmox API
+        # endpoints require the node *name*, not NetBox's numeric device ID.
+        if isinstance(proxmox_node, dict):
+            proxmox_node = proxmox_node.get('name') or proxmox_node.get('display')
+
+        if proxmox_node is not None and not isinstance(proxmox_node, str):
+            raise ValueError("Unable to determine Proxmox node name from NetBox device")
+
         self.netbox_api_config = {
             'api_proto': cfg_data['netbox_api_config']['api_proto'],
             'api_host': cfg_data['netbox_api_config']['api_host'],
@@ -79,13 +87,14 @@ class NetBoxProxmoxHelper:
 
             nb_obj_data = dict(nb_obj)
 
-            return nb_obj_data['device']['id']
+            return nb_obj_data['device']['name']
         except pynetbox.core.query.RequestError as e:
             raise pynetbox.core.query.RequestError(e)
     
 
     def proxmox_job_get_status(self, job_in):
         try:
+            start_time = time.monotonic()
             while True:
                 task_status = self.proxmox_api.nodes(self.proxmox_api_config['node']).tasks(job_in).status.get()
 
@@ -94,6 +103,9 @@ class NetBoxProxmoxHelper:
 
                 if 'status' in task_status and task_status['status'] == 'stopped':
                     break
+                if time.monotonic() - start_time >= 600:
+                    raise TimeoutError(f"Proxmox task {job_in} did not finish within 600 seconds")
+                time.sleep(1)
         except ResourceException as e:
             raise ResourceException(e)
         
@@ -218,7 +230,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
                     full=1,
                     name=json_in['data']['name'],
                     storage=json_in['data']['custom_fields']['proxmox_vm_storage'],
-                    target=json_in['data']['device']['id']
+                    target=self.proxmox_api_config['node']
                 )
 
                 self.proxmox_job_get_status(clone_data)
@@ -276,7 +288,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
         try:
             self.json_data_check_proxmox_vmid_exists(json_in)
 
-            start_data = self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(json_in['data']['serial']).status.start.post()
+            start_data = self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(json_in['data']['serial']).status.start.post()
 
             self.proxmox_job_get_status(start_data)
 
@@ -289,7 +301,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
         try: 
             self.json_data_check_proxmox_vmid_exists(json_in)
 
-            stop_data = self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(json_in['data']['serial']).status.stop.post()
+            stop_data = self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(json_in['data']['serial']).status.stop.post()
 
             self.proxmox_job_get_status(stop_data)
 
@@ -304,7 +316,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
 
             self.proxmox_stop_vm(json_in)
 
-            delete_data = self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(json_in['data']['serial']).delete()
+            delete_data = self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(json_in['data']['serial']).delete()
 
             self.proxmox_job_get_status(delete_data)
 
@@ -320,7 +332,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
             primary_ip = json_in['data']['primary_ip']['address']
             gateway = self.generate_gateway_from_ip_address(primary_ip)
 
-            create_ipconfig0 = self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(json_in['data']['serial']).config.post(
+            create_ipconfig0 = self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(json_in['data']['serial']).config.post(
                 ipconfig0=f"ip={primary_ip},gw={gateway}"
             )
 
@@ -337,7 +349,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
 
             proxmox_public_ssh_key = urllib.parse.quote(json_in['data']['custom_fields']['proxmox_public_ssh_key'].rstrip(), safe='')
 
-            create_ssh_public_key = self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(json_in['data']['serial']).config.post(
+            create_ssh_public_key = self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(json_in['data']['serial']).config.post(
                 sshkeys=f"{proxmox_public_ssh_key}"
             )
 
@@ -362,7 +374,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
                     f"{json_in['data']['name']}": f"{json_in['data']['custom_fields']['proxmox_disk_storage_volume']}:{int(json_in['data']['size'])/1000},backup=0,ssd=0"
                 }
 
-                add_disk_data = self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(proxmox_vmid).config.post(
+                add_disk_data = self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(proxmox_vmid).config.post(
                     **config_data
                 )
 
@@ -379,7 +391,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
         try:
             proxmox_vmid = self.netbox_get_proxmox_vmid(json_in['data']['virtual_machine']['id'])
 
-            disk_resize_info = self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(proxmox_vmid).resize.put(
+            disk_resize_info = self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(proxmox_vmid).resize.put(
                 disk=json_in['data']['name'],
                 size=f"{int(json_in['data']['size'])/1000}G"
             )
@@ -398,7 +410,7 @@ class NetBoxProxmoxHelperVM(NetBoxProxmoxHelper):
 
             proxmox_vmid = self.netbox_get_proxmox_vmid(json_in['data']['virtual_machine']['id'])
 
-            self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(proxmox_vmid).unlink.put(idlist=json_in['data']['name'], force=1)
+            self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(proxmox_vmid).unlink.put(idlist=json_in['data']['name'], force=1)
 
             return 200, {'result': f"Disk {json_in['data']['name']} for VM {json_in['data']['virtual_machine']['id']} deleted successfully"}
         except ResourceException as e:
@@ -429,7 +441,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
                     print("JSON IN", json_in['data'])
 
                 if 'data' in json_in and 'custom_fields' in json_in['data'] and 'serial' in json_in['data'] and json_in['data']['serial']:
-                    self.proxmox_api.nodes(json_in['data']['device']['id']).qemu(json_in['data']['serial']).config.get()
+                    self.proxmox_api.nodes(self.proxmox_api_config['node']).qemu(json_in['data']['serial']).config.get()
                 else:
                     new_vm_id = self.proxmox_api.cluster.get('nextid')
             except ResourceException as e:
@@ -465,7 +477,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
             if self.debug:
                 print("LXC CREATE DATA", lxc_create_data, new_vm_id)
 
-            create_lxc_data = self.proxmox_api.nodes(json_in['data']['device']['id']).lxc.create(**lxc_create_data)
+            create_lxc_data = self.proxmox_api.nodes(self.proxmox_api_config['node']).lxc.create(**lxc_create_data)
 
             self.proxmox_job_get_status(create_lxc_data)
 
@@ -487,7 +499,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
                 'rootfs': 'local-lvm:vm-104-disk-0,size=4G'}
                 """
                 
-                lxc_config_info = self.proxmox_api.nodes(json_in['data']['device']['id']).lxc(new_vm_id).config.get()
+                lxc_config_info = self.proxmox_api.nodes(self.proxmox_api_config['node']).lxc(new_vm_id).config.get()
 
                 if self.debug:
                     print("LXC CONFIG INFO", lxc_config_info)
@@ -511,7 +523,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
         
         # update VM vcpus and/or memory if defined
         if json_in['data']['serial'] and json_in['snapshots']['postchange']['vcpus'] and json_in['snapshots']['postchange']['memory']:
-            return self.__proxmox_update_lxc_vcpus_and_memory(json_in['data']['device']['id'], json_in['data']['serial'], json_in['snapshots']['postchange']['vcpus'], json_in['snapshots']['postchange']['memory'])
+            return self.__proxmox_update_lxc_vcpus_and_memory(self.proxmox_api_config['node'], json_in['data']['serial'], json_in['snapshots']['postchange']['vcpus'], json_in['snapshots']['postchange']['memory'])
         
         return 500, {'result': f"Unable to set vcpus ({json_in['data']['vcpus']}) and/or memory ({json_in['data']['memory']}) for LXC (vmid: {json_in['data']['serial']})"}
 
@@ -523,7 +535,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
             primary_ip = json_in['data']['primary_ip']['address']
             gateway = self.generate_gateway_from_ip_address(primary_ip)
 
-            self.proxmox_api.nodes(json_in['data']['device']['id']).lxc(json_in['data']['serial']).config.put(
+            self.proxmox_api.nodes(self.proxmox_api_config['node']).lxc(json_in['data']['serial']).config.put(
                     net0=f"name=net0,bridge=vmbr0,ip={primary_ip},gw={gateway},firewall=1"
             )
 
@@ -547,7 +559,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
                 'size': disk_size
             }
 
-            disk_resize_info = self.proxmox_api.nodes(json_in['data']['device']['id']).lxc(proxmox_vmid).resize.put(**lxc_disk_size_info)
+            disk_resize_info = self.proxmox_api.nodes(self.proxmox_api_config['node']).lxc(proxmox_vmid).resize.put(**lxc_disk_size_info)
 
             self.proxmox_job_get_status(disk_resize_info)
 
@@ -560,7 +572,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
         try:
             self.json_data_check_proxmox_vmid_exists(json_in)
 
-            start_data = self.proxmox_api.nodes(json_in['data']['device']['id']).lxc(json_in['data']['serial']).status.start.post()
+            start_data = self.proxmox_api.nodes(self.proxmox_api_config['node']).lxc(json_in['data']['serial']).status.start.post()
 
             self.proxmox_job_get_status(start_data)
 
@@ -573,7 +585,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
         try:
             self.json_data_check_proxmox_vmid_exists(json_in)
 
-            stop_data = self.proxmox_api.nodes(json_in['data']['device']['id']).lxc(json_in['data']['serial']).status.stop.post()
+            stop_data = self.proxmox_api.nodes(self.proxmox_api_config['node']).lxc(json_in['data']['serial']).status.stop.post()
 
             self.proxmox_job_get_status(stop_data)
 
@@ -588,7 +600,7 @@ class NetBoxProxmoxHelperLXC(NetBoxProxmoxHelper):
 
             self.proxmox_stop_lxc(json_in)
 
-            delete_data = self.proxmox_api.nodes(json_in['data']['device']['id']).lxc.delete(json_in['data']['serial'])
+            delete_data = self.proxmox_api.nodes(self.proxmox_api_config['node']).lxc.delete(json_in['data']['serial'])
 
             self.proxmox_job_get_status(delete_data)
 
