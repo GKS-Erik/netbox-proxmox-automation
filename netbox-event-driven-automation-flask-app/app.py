@@ -14,6 +14,7 @@ from backends import BackendFactory
 from backends.base import UnsupportedOperationError
 from clients import GuestNotFoundError, NetBoxClient, ProxmoxClient, ProxmoxTaskError
 from config import AppConfig, load_config
+from logging_utils import log_payload
 from models import parse_webhook
 from services.vm_service import AutomationService
 
@@ -21,9 +22,9 @@ VERSION = "2026.08.11"
 APP_NAME = "netbox-proxmox-webhook-listener"
 
 
-def build_service(config: AppConfig) -> AutomationService:
-    proxmox = ProxmoxClient(config.proxmox_api_config)
-    netbox = NetBoxClient(config.netbox_api_config)
+def build_service(config: AppConfig, debug=False) -> AutomationService:
+    proxmox = ProxmoxClient(config.proxmox_api_config, debug=debug)
+    netbox = NetBoxClient(config.netbox_api_config, debug=debug)
     backends = BackendFactory(proxmox, netbox, config.proxmox_api_config)
     return AutomationService(backends, netbox)
 
@@ -36,9 +37,8 @@ def create_app(
         os.environ.get("APP_CONFIG_FILE", Path(__file__).with_name("app_config.yml"))
     )
     config = config or load_config(config_path)
-    service = service or build_service(config)
-
     flask_app = Flask(__name__)
+    service = service or build_service(config, debug=lambda: flask_app.debug)
     api = Api(
         flask_app,
         version=VERSION,
@@ -46,7 +46,12 @@ def create_app(
         description="NetBox-Proxmox Webhook Listener",
     )
     namespace = api.namespace(config.netbox_webhook_name)
-    logger = _configure_logging(flask_app.debug)
+    logger = _configure_logging(config.log_level, flask_app.debug)
+
+    @flask_app.before_request
+    def apply_effective_log_level():
+        # Flask CLI may enable debug after the application object is created.
+        logger.setLevel(logging.DEBUG if flask_app.debug else getattr(logging, config.log_level))
 
     state = {
         "server_start": datetime.now(UTC),
@@ -99,6 +104,12 @@ def create_app(
                     "request_id": payload.get("request_id"),
                 },
             )
+            log_payload(
+                logger,
+                flask_app.debug and config.netbox_api_config.debug_payloads,
+                "NetBox webhook payload",
+                payload,
+            )
 
             try:
                 event = parse_webhook(payload)
@@ -136,9 +147,9 @@ def create_app(
     return flask_app
 
 
-def _configure_logging(debug: bool) -> logging.Logger:
+def _configure_logging(configured_level: str, debug: bool) -> logging.Logger:
     logger = logging.getLogger(APP_NAME)
-    logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    logger.setLevel(logging.DEBUG if debug else getattr(logging, configured_level))
     if not logger.handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))

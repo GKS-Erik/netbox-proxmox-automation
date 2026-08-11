@@ -31,3 +31,11 @@ QEMU and LXC backends expose the same orchestration methods. Differences that
 are real Proxmox capabilities remain inside the backend and raise
 `UnsupportedOperationError` when the common operation is not available.
 Raw webhook dictionaries must not be passed beyond `models/webhook.py`.
+
+## Logging
+
+`log_level` controls application logging outside Flask debug mode. Flask debug
+mode always overrides this to `DEBUG`. Each API config has a separate
+`debug_payloads` switch; request and response payloads are logged only when
+that switch and Flask debug mode are both enabled. Sensitive values are
+redacted before logging.

@@ -173,6 +173,7 @@ inventory
 tests/
 !netbox-event-driven-automation-flask-app/tests/
 !netbox-event-driven-automation-flask-app/tests/**
+netbox-event-driven-automation-flask-app/tests/__pycache__/
 
 app_config.yml
 netbox_setup_custom_fields.yml

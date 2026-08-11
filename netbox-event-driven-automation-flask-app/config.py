@@ -1,5 +1,6 @@
 from pathlib import Path
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from typing import Literal
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class ProxmoxConfig(BaseModel):
@@ -11,6 +12,7 @@ class ProxmoxConfig(BaseModel):
     api_token_id: str
     api_token_secret: str
     verify_ssl: bool = True
+    debug_payloads: bool = False
     default_node: str | None = Field(
         default=None,
         validation_alias=AliasChoices("default_node", "node"),
@@ -27,6 +29,7 @@ class NetBoxConfig(BaseModel):
     api_port: int = 443
     api_token: str
     verify_ssl: bool = True
+    debug_payloads: bool = False
 
     @property
     def url(self) -> str:
@@ -37,8 +40,14 @@ class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     netbox_webhook_name: str = "netbox-proxmox-webhook"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     proxmox_api_config: ProxmoxConfig
     netbox_api_config: NetBoxConfig
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def normalize_log_level(cls, value: str) -> str:
+        return value.upper()
 
 
 def load_config(path: str | Path) -> AppConfig:
