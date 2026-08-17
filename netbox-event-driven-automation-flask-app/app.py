@@ -111,23 +111,27 @@ def create_app(
                 payload,
             )
 
+            event = None
             try:
                 event = parse_webhook(payload)
                 results = service.handle(event)
             except ValidationError as exc:
                 logger.warning("Invalid NetBox webhook: %s", exc)
                 return {"result": "Invalid NetBox webhook", "errors": exc.errors()}, 400
-            except (ValueError, LookupError, GuestNotFoundError, UnsupportedOperationError) as exc:
+            except (ValueError, LookupError, UnsupportedOperationError) as exc:
                 logger.warning("Unable to process NetBox webhook: %s", exc)
                 return {"result": str(exc)}, 409
-            except (ProxmoxTaskError, TimeoutError) as exc:
+            except (GuestNotFoundError, ProxmoxTaskError, TimeoutError) as exc:
+                _mark_event_failed(service, event, logger)
                 logger.error("Proxmox task failed: %s", exc)
                 return {"result": str(exc)}, 502
             except ResourceException as exc:
+                _mark_event_failed(service, event, logger)
                 message = getattr(exc, "content", str(exc))
                 logger.exception("Proxmox API request failed")
                 return {"result": message}, 502
             except requests.RequestException as exc:
+                _mark_event_failed(service, event, logger)
                 logger.exception("API connection failed")
                 return {"result": f"API connection failed: {exc}"}, 502
             except Exception:
@@ -155,6 +159,15 @@ def _configure_logging(configured_level: str, debug: bool) -> logging.Logger:
         handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
         logger.addHandler(handler)
     return logger
+
+
+def _mark_event_failed(service: AutomationService, event, logger: logging.Logger) -> None:
+    if event is None:
+        return
+    try:
+        service.mark_failed(event)
+    except Exception:
+        logger.exception("Unable to mark NetBox VM as failed after Proxmox error")
 
 
 app = create_app()

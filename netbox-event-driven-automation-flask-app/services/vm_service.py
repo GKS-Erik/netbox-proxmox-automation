@@ -28,6 +28,14 @@ class AutomationService:
             return self._handle_vm(event)
         return self._handle_disk(event)
 
+    def mark_failed(self, event: WebhookEvent) -> None:
+        if isinstance(event, VirtualMachineEvent):
+            vm_id = event.data.id
+            event.data.status.value = "failed"
+        else:
+            vm_id = event.data.virtual_machine.id
+        self.netbox.set_vm_status(vm_id, "failed")
+
     def _handle_vm(self, event: VirtualMachineEvent) -> list[OperationResult]:
         backend = self.backends.for_kind(event.data.kind)
         operations = self.dispatcher.operations_for_vm(event)

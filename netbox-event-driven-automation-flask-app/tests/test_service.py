@@ -100,6 +100,17 @@ class AutomationServiceTests(unittest.TestCase):
             [Operation.PROVISION, Operation.UPDATE_RESOURCES],
         )
 
+    def test_mark_failed_updates_netbox_and_internal_vm_status(self):
+        factory = FakeFactory()
+        netbox = RecordingNetBox()
+        service = AutomationService(factory, netbox=netbox)
+        event = parse_webhook(vm_payload())
+
+        service.mark_failed(event)
+
+        self.assertEqual(netbox.status_updates, [(42, "failed")])
+        self.assertEqual(event.data.status.value, "failed")
+
 
 if __name__ == "__main__":
     unittest.main()
