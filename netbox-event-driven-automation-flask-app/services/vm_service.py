@@ -30,6 +30,11 @@ class AutomationService:
 
     def mark_failed(self, event: WebhookEvent) -> None:
         if isinstance(event, VirtualMachineEvent):
+            # A deleted-event is emitted after the NetBox record has gone. It
+            # cannot be marked failed, and an absent Proxmox guest is the
+            # desired end state for this operation.
+            if event.event is EventType.DELETED:
+                return
             vm_id = event.data.id
             event.data.status.value = "failed"
         else:

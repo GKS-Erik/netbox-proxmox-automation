@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from clients import NetBoxClient, ProxmoxClient, ResolvedGuest
+from clients import GuestNotFoundError, NetBoxClient, ProxmoxClient, ResolvedGuest
 from config import ProxmoxConfig
 from models.operations import Operation, OperationResult
 from models.webhook import GuestKind, VirtualDisk, VirtualMachine
@@ -53,7 +53,13 @@ class VirtualizationBackend(ABC):
         return OperationResult(Operation.STOP, f"{self.kind.value} {guest.vmid} stopped")
 
     def delete(self, vm: VirtualMachine) -> OperationResult:
-        guest = self.resolve(vm)
+        try:
+            guest = self.resolve(vm)
+        except GuestNotFoundError:
+            return OperationResult(
+                Operation.DELETE,
+                f"{self.kind.value} {self._vmid(vm)} was already absent from Proxmox",
+            )
         self.proxmox.delete(guest)
         return OperationResult(Operation.DELETE, f"{self.kind.value} {guest.vmid} deleted")
 
@@ -88,4 +94,3 @@ class VirtualizationBackend(ABC):
     @abstractmethod
     def delete_disk(self, vm: VirtualMachine, disk: VirtualDisk) -> OperationResult:
         ...
-

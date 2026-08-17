@@ -111,6 +111,18 @@ class AutomationServiceTests(unittest.TestCase):
         self.assertEqual(netbox.status_updates, [(42, "failed")])
         self.assertEqual(event.data.status.value, "failed")
 
+    def test_deleted_vm_is_not_marked_failed_in_netbox(self):
+        factory = FakeFactory()
+        netbox = RecordingNetBox()
+        service = AutomationService(factory, netbox=netbox)
+        payload = vm_payload()
+        payload["event"] = "deleted"
+        event = parse_webhook(payload)
+
+        service.mark_failed(event)
+
+        self.assertEqual(netbox.status_updates, [])
+
 
 if __name__ == "__main__":
     unittest.main()
