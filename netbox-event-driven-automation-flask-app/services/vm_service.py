@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from models.operations import Operation, OperationResult
-from models.webhook import DiskEvent, VirtualMachine, VirtualMachineEvent, WebhookEvent
+from models.webhook import DiskEvent, EventType, VirtualMachine, VirtualMachineEvent, WebhookEvent
 
 from .dispatcher import EventDispatcher
 
@@ -31,7 +31,11 @@ class AutomationService:
     def _handle_vm(self, event: VirtualMachineEvent) -> list[OperationResult]:
         backend = self.backends.for_kind(event.data.kind)
         operations = self.dispatcher.operations_for_vm(event)
-        return [self._execute(backend, operation, event.data) for operation in operations]
+        results = [self._execute(backend, operation, event.data) for operation in operations]
+        if event.event is EventType.CREATED and Operation.PROVISION in operations:
+            self.netbox.set_vm_status(event.data.id, "offline")
+            event.data.status.value = "offline"
+        return results
 
     def _handle_disk(self, event: DiskEvent) -> list[OperationResult]:
         vm = self.netbox.get_vm(event.data.virtual_machine.id)

@@ -55,6 +55,15 @@ class NetBoxClient:
         self._log("NetBox request update VMID", {"id": vm_id, "serial": vmid})
         record.save()
 
+    def set_vm_status(self, vm_id: int, status: str) -> None:
+        self._log("NetBox request get VM for status update", {"id": vm_id})
+        record = self.api.virtualization.virtual_machines.get(id=vm_id)
+        if not record:
+            raise LookupError(f"Virtual machine {vm_id} was not found in NetBox")
+        record.status = status
+        self._log("NetBox request update VM status", {"id": vm_id, "status": status})
+        record.save()
+
     def create_root_disk(self, vm_id: int, name: str, config: str) -> None:
         disk_info, *options = config.split(",")
         storage = disk_info.split(":", 1)[0]
