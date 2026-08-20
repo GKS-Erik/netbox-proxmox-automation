@@ -64,6 +64,28 @@ class NetBoxClient:
         self._log("NetBox request update VM status", {"id": vm_id, "status": status})
         record.save()
 
+    def sync_custom_field_choice_set(
+        self,
+        name: str,
+        choices: list[list[str]],
+    ) -> bool:
+        self._log("NetBox request get custom field choice set", {"name": name})
+        choice_set = self.api.extras.custom_field_choice_sets.get(name=name)
+        payload = {"name": name, "extra_choices": choices}
+        if choice_set:
+            self._log("NetBox request update custom field choice set", payload)
+            choice_set.extra_choices = choices
+            choice_set.save()
+            return False
+
+        self._log("NetBox request create custom field choice set", payload)
+        created = self.api.extras.custom_field_choice_sets.create(**payload)
+        self._log(
+            "NetBox response create custom field choice set",
+            dict(created) if created is not None else None,
+        )
+        return True
+
     def create_root_disk(self, vm_id: int, name: str, config: str) -> None:
         disk_info, *options = config.split(",")
         storage = disk_info.split(":", 1)[0]

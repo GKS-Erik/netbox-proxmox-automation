@@ -39,6 +39,14 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(config.proxmox_api_config.debug_payloads)
         self.assertFalse(config.netbox_api_config.debug_payloads)
 
+    def test_template_choice_set_has_default_name(self):
+        config = AppConfig.model_validate(self.config_payload())
+
+        self.assertEqual(
+            config.netbox_api_config.proxmox_template_choice_set_name,
+            "Proxmox templates",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

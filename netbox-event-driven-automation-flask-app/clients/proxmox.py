@@ -9,6 +9,7 @@ from proxmoxer import ProxmoxAPI
 
 from config import ProxmoxConfig
 from logging_utils import log_payload
+from models.templates import ProxmoxTemplate
 from models.webhook import GuestKind
 
 
@@ -76,6 +77,21 @@ class ProxmoxClient:
                     status=resource.get("status"),
                 )
         raise GuestNotFoundError(f"{kind or 'guest'} {vmid} was not found in Proxmox")
+
+    def list_qemu_templates(self) -> list[ProxmoxTemplate]:
+        self._log("Proxmox request QEMU template inventory", {"type": "vm"})
+        resources = self.api.cluster.resources.get(type="vm")
+        self._log("Proxmox response QEMU template inventory", resources)
+        templates = [
+            ProxmoxTemplate(
+                vmid=int(resource["vmid"]),
+                name=resource.get("name") or str(resource["vmid"]),
+                node=resource["node"],
+            )
+            for resource in resources
+            if resource.get("type") == "qemu" and bool(resource.get("template"))
+        ]
+        return sorted(templates, key=lambda template: template.vmid)
 
     def next_vmid(self) -> int:
         self._log("Proxmox request cluster/nextid", {})

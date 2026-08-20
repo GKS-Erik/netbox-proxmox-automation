@@ -39,3 +39,10 @@ mode always overrides this to `DEBUG`. Each API config has a separate
 `debug_payloads` switch; request and response payloads are logged only when
 that switch and Flask debug mode are both enabled. Sensitive values are
 redacted before logging.
+
+## Template synchronization
+
+`POST /<netbox_webhook_name>/templates/sync/` retrieves all QEMU templates
+from the Proxmox cluster inventory and fully synchronizes the configured
+NetBox Custom Field Choice Set. The choice value is the VMID and its label is
+the Proxmox template name. The Choice Set is created when it does not exist.

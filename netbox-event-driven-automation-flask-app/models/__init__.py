@@ -1,4 +1,5 @@
 from .operations import Operation, OperationResult
+from .templates import ProxmoxTemplate, TemplateSyncResult
 from .webhook import (
     DiskEvent,
     GuestKind,
@@ -12,6 +13,8 @@ __all__ = [
     "GuestKind",
     "Operation",
     "OperationResult",
+    "ProxmoxTemplate",
+    "TemplateSyncResult",
     "VirtualMachine",
     "VirtualMachineEvent",
     "parse_webhook",

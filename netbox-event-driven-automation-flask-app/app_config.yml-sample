@@ -23,4 +23,5 @@ netbox_api_config:
   verify_ssl: false # or true, up to you
   # Log sanitized NetBox API and incoming webhook payloads, but only in Flask debug mode.
   debug_payloads: false
+  proxmox_template_choice_set_name: "Proxmox templates"
 

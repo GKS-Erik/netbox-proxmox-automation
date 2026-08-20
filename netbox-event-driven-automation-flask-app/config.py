@@ -30,6 +30,10 @@ class NetBoxConfig(BaseModel):
     api_token: str
     verify_ssl: bool = True
     debug_payloads: bool = False
+    proxmox_template_choice_set_name: str = Field(
+        default="Proxmox templates",
+        min_length=1,
+    )
 
     @property
     def url(self) -> str:

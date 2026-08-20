@@ -8,6 +8,7 @@ import requests
 from flask import Flask, jsonify, request
 from flask_restx import Api, Resource, fields
 from proxmoxer import ResourceException
+from pynetbox.core.query import RequestError as NetBoxRequestError
 from pydantic import ValidationError
 
 from backends import BackendFactory
@@ -16,29 +17,45 @@ from clients import GuestNotFoundError, NetBoxClient, ProxmoxClient, ProxmoxTask
 from config import AppConfig, load_config
 from logging_utils import log_payload
 from models import parse_webhook
+from services import NoTemplatesFoundError, TemplateSyncService
 from services.vm_service import AutomationService
 
-VERSION = "2026.08.11"
+VERSION = "2026.08.20"
 APP_NAME = "netbox-proxmox-webhook-listener"
 
 
-def build_service(config: AppConfig, debug=False) -> AutomationService:
+def build_services(
+    config: AppConfig,
+    debug=False,
+) -> tuple[AutomationService, TemplateSyncService]:
     proxmox = ProxmoxClient(config.proxmox_api_config, debug=debug)
     netbox = NetBoxClient(config.netbox_api_config, debug=debug)
     backends = BackendFactory(proxmox, netbox, config.proxmox_api_config)
-    return AutomationService(backends, netbox)
+    return AutomationService(backends, netbox), TemplateSyncService(proxmox, netbox)
+
+
+def build_service(config: AppConfig, debug=False) -> AutomationService:
+    service, _ = build_services(config, debug)
+    return service
 
 
 def create_app(
     config: AppConfig | None = None,
     service: AutomationService | None = None,
+    template_service: TemplateSyncService | None = None,
 ) -> Flask:
     config_path = Path(
         os.environ.get("APP_CONFIG_FILE", Path(__file__).with_name("app_config.yml"))
     )
     config = config or load_config(config_path)
     flask_app = Flask(__name__)
-    service = service or build_service(config, debug=lambda: flask_app.debug)
+    if service is None or template_service is None:
+        built_service, built_template_service = build_services(
+            config,
+            debug=lambda: flask_app.debug,
+        )
+        service = service or built_service
+        template_service = template_service or built_template_service
     api = Api(
         flask_app,
         version=VERSION,
@@ -87,6 +104,38 @@ def create_app(
                     },
                 }
             return jsonify(response)
+
+    @namespace.route("/templates/sync/")
+    class TemplateSyncResource(Resource):
+        def post(self):
+            choice_set_name = config.netbox_api_config.proxmox_template_choice_set_name
+            logger.info("Synchronizing Proxmox templates to NetBox choice set %s", choice_set_name)
+            try:
+                result = template_service.sync(choice_set_name)
+            except NoTemplatesFoundError as exc:
+                logger.warning("Template synchronization skipped: %s", exc)
+                return {"result": str(exc)}, 409
+            except ResourceException as exc:
+                message = getattr(exc, "content", str(exc))
+                logger.exception("Proxmox API request failed during template synchronization")
+                return {"result": message}, 502
+            except (NetBoxRequestError, requests.RequestException) as exc:
+                logger.exception("API request failed during template synchronization")
+                return {"result": f"Template synchronization failed: {exc}"}, 502
+            except Exception:
+                logger.exception("Unexpected template synchronization error")
+                return {"result": "Unexpected template synchronization error"}, 500
+
+            action = "created" if result.created else "updated"
+            return {
+                "result": (
+                    f"Choice set {result.choice_set_name} {action} with "
+                    f"{result.template_count} Proxmox templates"
+                ),
+                "choice_set": result.choice_set_name,
+                "template_count": result.template_count,
+                "created": result.created,
+            }, 200
 
     @namespace.route("/")
     class WebhookResource(Resource):
