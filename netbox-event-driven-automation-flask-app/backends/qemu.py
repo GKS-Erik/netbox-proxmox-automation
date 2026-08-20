@@ -11,10 +11,10 @@ class QemuBackend(VirtualizationBackend):
     kind = GuestKind.QEMU
 
     def provision(self, vm: VirtualMachine) -> OperationResult:
-        template = vm.custom_fields.proxmox_vm_templates
+        template = vm.custom_fields.proxmox_vm_template
         storage = vm.custom_fields.proxmox_vm_storage
         if template is None or not storage:
-            raise ValueError("QEMU provisioning requires proxmox_vm_templates and proxmox_vm_storage")
+            raise ValueError("QEMU provisioning requires proxmox_vm_template and proxmox_vm_storage")
         vmid = vm.serial or self.proxmox.next_vmid()
         guest = self.proxmox.clone_qemu(
             template_vmid=template,

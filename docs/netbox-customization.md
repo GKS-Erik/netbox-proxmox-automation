@@ -83,9 +83,9 @@ Then verify that everything has been created.  In the end, you should have Custo
       - Label: Proxmox public SSH key
       - Group name: Proxmox (common)
       - Type: Text (long)
-  - proxmox_lxc_templates:
+  - proxmox_lxc_template:
       - Object types: Virtual Machine
-      - Label: Proxmox LXC Templates
+      - Label: Proxmox LXC Template
       - Group name: Proxmox LXC
       - Type: Selection
   - proxmox_disk_storage_volume:
@@ -93,9 +93,9 @@ Then verify that everything has been created.  In the end, you should have Custo
       - Label: Proxmox Disk Storage Volume
       - Group name: Proxmox VM
       - Type: Selection
-  - proxmox_vm_templates:
+  - proxmox_vm_template:
       - Object types: Virtual Machine
-      - Label: Proxmox VM Templates
+      - Label: Proxmox VM Template
       - Group name: Proxmox VM
       - Type: Selection
 
@@ -104,13 +104,13 @@ And you have Custom Field Choices for the following:
   - proxmox-cluster-nodes: used by `proxmox_node` custom field
       - Choices: available Proxmox nodes
       - Default: first "discovered" Proxmox node
-  - proxmox-lxc-templates: used by `proxmox_lxc_templates` custom field
+  - proxmox-lxc-templates: used by `proxmox_lxc_template` custom field
       - Choices: "discovered" available Proxmox LXC images
       - Default: first "discovered" Proxmox LXC image
   - proxmox-vm-storage: used by `proxmox_vm_storage` custom field
       - Choices: "discovered" Proxmox storage volumes
       - Default: first "discovered" Proxmox storage volume
-  - proxmox-vm-templates: used by `proxmox_vm_templates` custom field
+  - proxmox-vm-templates: used by `proxmox_vm_template` custom field
       - Choices: "discovered" Proxmox VM templates
       - Default: first "discovered" Proxmox VM template, based on lowest discovered vmid
   - proxmox-vm-type: used by `proxmox_vm_type`

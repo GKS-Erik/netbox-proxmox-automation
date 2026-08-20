@@ -122,7 +122,7 @@ def netbox_create_vm(nb_url = None, nb_api_token = None, nb_options = {}, proxmo
                 create_vm_config['custom_fields']['proxmox_vm_type'] = 'lxc'
 
             # Don't take the default template (jammy, currently) for dicovered VM and LXC
-            create_vm_config['custom_fields']['proxmox_vm_templates'] = ''
+            create_vm_config['custom_fields']['proxmox_vm_template'] = ''
 
         nb_created_vm = NetBoxVirtualMachines(nb_url, nb_api_token, nb_options, create_vm_config)
         nb_created_vm_id = dict(nb_created_vm.obj)['id']

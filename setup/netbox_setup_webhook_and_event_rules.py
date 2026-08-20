@@ -136,7 +136,7 @@ def main():
                         "value": "vm"
                     },
                     {
-                        "attr": "custom_fields.proxmox_vm_templates",
+                        "attr": "custom_fields.proxmox_vm_template",
                         "negate": True,
                         "value": None
                     },
@@ -180,7 +180,7 @@ def main():
                         "value": "vm"
                     },
                     {
-                        "attr": "custom_fields.proxmox_vm_templates",
+                        "attr": "custom_fields.proxmox_vm_template",
                         "negate": True,
                         "value": None
                     }
@@ -373,7 +373,7 @@ def main():
                         "value": "lxc"
                     },
                     {
-                        "attr": "custom_fields.proxmox_lxc_templates",
+                        "attr": "custom_fields.proxmox_lxc_template",
                         "negate": True,
                         "value": None
                     },
@@ -422,7 +422,7 @@ def main():
                         "value": "lxc"
                     },
                     {
-                        "attr": "custom_fields.proxmox_lxc_templates",
+                        "attr": "custom_fields.proxmox_lxc_template",
                         "negate": True,
                         "value": None
                     },
@@ -623,7 +623,7 @@ def main():
     elif app_config['automation_type'] == 'ansible_automation':
         ansible_automation_webhook_body_templates = {
             # add this: "vmid": "{{ data['custom_fields']['proxmox_vmid'] }}",
-            'proxmox-clone-vm-and-set-resources': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"name\": \"{{ data['name'] }}\",\r\n      \"vcpus\": \"{{ data['vcpus'] }}\",\r\n      \"memory\": \"{{ data['memory'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\",\r\n      \"template\": \"{{ data['custom_fields']['proxmox_vm_templates'] }}\",\r\n      \"storage\": \"{{ data['custom_fields']['proxmox_vm_storage'] }}\"\r\n    }\r\n  }\r\n}",
+            'proxmox-clone-vm-and-set-resources': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"name\": \"{{ data['name'] }}\",\r\n      \"vcpus\": \"{{ data['vcpus'] }}\",\r\n      \"memory\": \"{{ data['memory'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\",\r\n      \"template\": \"{{ data['custom_fields']['proxmox_vm_template'] }}\",\r\n      \"storage\": \"{{ data['custom_fields']['proxmox_vm_storage'] }}\"\r\n    }\r\n  }\r\n}",
             'proxmox-remove-vm': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"name\": \"{{ data['name'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\"\r\n    }\r\n  }\r\n}",
             'proxmox-set-ipconfig0': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"name\": \"{{ data['name'] }}\",\r\n      \"ip\": \"{{ data['primary_ip4']['address'] }}\",\r\n      \"ssh_key\": \"{{ data['custom_fields']['proxmox_public_ssh_key'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\"\r\n    }\r\n  }\r\n}",
             'proxmox-resize-vm-disk': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"name\": \"{{ data['virtual_machine']['name'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\",\r\n      \"resize_disk\": \"{{ data['name'] }}\",\r\n      \"resize_disk_size\": \"{{ data['size'] }}\",\r\n      \"storage_volume\": \"{{ data['custom_fields']['proxmox_storage_volume'] }}\"\r\n    }\r\n  }\r\n}",
@@ -631,7 +631,7 @@ def main():
             'proxmox-remove-vm-disk': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"name\": \"{{ data['virtual_machine']['name'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\",\r\n      \"remove_disk\": \"{{ data['name'] }}\"\r\n    }\r\n  }\r\n}",
             'proxmox-stop-vm': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"name\": \"{{ data['name'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\"\r\n    }\r\n  }\r\n}",
             'proxmox-start-vm': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"name\": \"{{ data['name'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\"\r\n    }\r\n  }\r\n}",
-            'proxmox-clone-lxc-and-set-resources': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"hostname\": \"{{ data['name'] }}\",\r\n      \"cpus\": \"{{ data['vcpus'] }}\",\r\n      \"memory\": \"{{ data['memory'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\",\r\n      \"template\": \"{{ data['custom_fields']['proxmox_lxc_templates'] }}\",\r\n      \"storage\": \"{{ data['custom_fields']['proxmox_vm_storage'] }}\",\r\n      \"pubkey\": \"{{ data['custom_fields']['proxmox_public_ssh_key'] }}\"\r\n    }\r\n  }\r\n}",
+            'proxmox-clone-lxc-and-set-resources': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"hostname\": \"{{ data['name'] }}\",\r\n      \"cpus\": \"{{ data['vcpus'] }}\",\r\n      \"memory\": \"{{ data['memory'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\",\r\n      \"template\": \"{{ data['custom_fields']['proxmox_lxc_template'] }}\",\r\n      \"storage\": \"{{ data['custom_fields']['proxmox_vm_storage'] }}\",\r\n      \"pubkey\": \"{{ data['custom_fields']['proxmox_public_ssh_key'] }}\"\r\n    }\r\n  }\r\n}",
             'proxmox-remove-lxc': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"hostname\": \"{{ data['name'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\"\r\n    }\r\n  }\r\n}",
             'proxmox-start-lxc': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"hostname\": \"{{ data['name'] }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'] }}\"\r\n    }\r\n  }\r\n}",
             'proxmox-stop-lxc': "{\r\n  \"extra_vars\": {\r\n    \"vm_config\": {\r\n      \"hostname\": \"{{ data['name'] }}\",\r\n      \"node\": \"{{ data['custom_fields']['proxmox_node'} }}\",\r\n      \"vmid\": \"{{ data['custom_fields']['proxmox_vmid'] }}\"\r\n    }\r\n  }\r\n}",
@@ -721,5 +721,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    

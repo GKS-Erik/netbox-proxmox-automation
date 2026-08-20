@@ -76,7 +76,7 @@ class AutomationServiceTests(unittest.TestCase):
             serial=None,
             custom_fields={
                 "proxmox_vm_type": "vm",
-                "proxmox_vm_templates": 9000,
+                "proxmox_vm_template": 999,
                 "proxmox_vm_storage": "local-lvm",
             },
         )

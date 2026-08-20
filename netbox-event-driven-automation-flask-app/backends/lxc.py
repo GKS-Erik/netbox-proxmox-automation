@@ -9,7 +9,7 @@ class LxcBackend(VirtualizationBackend):
     kind = GuestKind.LXC
 
     def provision(self, vm: VirtualMachine) -> OperationResult:
-        template = vm.custom_fields.proxmox_lxc_templates
+        template = vm.custom_fields.proxmox_lxc_template
         storage = vm.custom_fields.proxmox_vm_storage
         if not template or not storage or vm.vcpus is None or vm.memory is None:
             raise ValueError("LXC provisioning requires template, storage, vcpus and memory")
