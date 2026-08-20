@@ -46,3 +46,6 @@ redacted before logging.
 from the Proxmox cluster inventory and fully synchronizes the configured
 NetBox Custom Field Choice Set. The choice value is the VMID and its label is
 the Proxmox template name. The Choice Set is created when it does not exist.
+The same synchronization is attempted once during application startup. A
+startup synchronization failure is logged but does not prevent the webhook
+service from starting, so a later endpoint call can recover it.

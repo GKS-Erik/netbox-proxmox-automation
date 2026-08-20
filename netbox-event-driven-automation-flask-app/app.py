@@ -65,6 +65,11 @@ def create_app(
     namespace = api.namespace(config.netbox_webhook_name)
     logger = _configure_logging(config.log_level, flask_app.debug)
 
+    template_service.sync_on_startup(
+        config.netbox_api_config.proxmox_template_choice_set_name,
+        logger,
+    )
+
     @flask_app.before_request
     def apply_effective_log_level():
         # Flask CLI may enable debug after the application object is created.

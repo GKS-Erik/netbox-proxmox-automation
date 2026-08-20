@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from models.templates import TemplateSyncResult
@@ -28,3 +29,20 @@ class TemplateSyncService:
             template_count=len(templates),
             created=created,
         )
+
+    def sync_on_startup(self, choice_set_name: str, logger: logging.Logger) -> None:
+        logger.info("Synchronizing Proxmox templates during service startup")
+        try:
+            result = self.sync(choice_set_name)
+        except NoTemplatesFoundError as exc:
+            logger.warning("Startup template synchronization skipped: %s", exc)
+        except Exception:
+            logger.exception("Startup template synchronization failed")
+        else:
+            action = "created" if result.created else "updated"
+            logger.info(
+                "Choice set %s %s with %d Proxmox templates during service startup",
+                result.choice_set_name,
+                action,
+                result.template_count,
+            )

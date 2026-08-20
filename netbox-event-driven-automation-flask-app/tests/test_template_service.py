@@ -1,4 +1,5 @@
 import unittest
+import logging
 
 from models.templates import ProxmoxTemplate
 from services.template_service import NoTemplatesFoundError, TemplateSyncService
@@ -51,6 +52,24 @@ class TemplateSyncServiceTests(unittest.TestCase):
             service.sync("My templates")
 
         self.assertEqual(netbox.calls, [])
+
+    def test_startup_sync_runs_without_propagating_empty_inventory(self):
+        proxmox = FakeProxmox()
+        proxmox.list_qemu_templates = lambda: []
+        netbox = FakeNetBox()
+        service = TemplateSyncService(proxmox, netbox)
+
+        service.sync_on_startup("Proxmox templates", logging.getLogger("test"))
+
+        self.assertEqual(netbox.calls, [])
+
+    def test_startup_sync_calls_regular_synchronization(self):
+        netbox = FakeNetBox()
+        service = TemplateSyncService(FakeProxmox(), netbox)
+
+        service.sync_on_startup("Proxmox templates", logging.getLogger("test"))
+
+        self.assertEqual(len(netbox.calls), 1)
 
 
 if __name__ == "__main__":
