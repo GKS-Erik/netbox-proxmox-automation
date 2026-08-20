@@ -38,15 +38,18 @@ def create_custom_field_choice_sets_proxmox_vm_templates(proxmox_api_obj, nb_opt
 
 
 def create_custom_field_choice_sets_proxmox_vm_storage(proxmox_api_obj, nb_options: dict):
-    proxmox_api_obj.proxmox_get_vm_storage_volumes()
-    print(proxmox_api_obj.proxmox_storage_volumes)
-
-    extra_choices = []
-
-    for psv in proxmox_api_obj.proxmox_storage_volumes:
-        extra_choices.append([psv, psv])
+    storage_volumes = proxmox_api_obj.proxmox_get_vm_storage_volumes()
+    extra_choices = [[storage, storage] for storage in storage_volumes]
 
     ncfcs = NetBoxCustomFieldChoiceSets(netbox_url, netbox_api_token, nb_options, {'name': 'proxmox-vm-storage', 'extra_choices': extra_choices})
+    return dict(ncfcs.obj)['id']
+
+
+def create_custom_field_choice_sets_proxmox_lxc_storage(proxmox_api_obj, nb_options: dict):
+    storage_volumes = proxmox_api_obj.proxmox_get_lxc_storage_volumes()
+    extra_choices = [[storage, storage] for storage in storage_volumes]
+
+    ncfcs = NetBoxCustomFieldChoiceSets(netbox_url, netbox_api_token, nb_options, {'name': 'proxmox-lxc-storage', 'extra_choices': extra_choices})
     return dict(ncfcs.obj)['id']
 
 
@@ -102,23 +105,21 @@ def create_custom_field(netbox_url=None, netbox_api_token=None, nb_options = {},
     weight = 100
     description = ''
 
-    if name in ['proxmox_lxc_template']:
+    if name in ['proxmox_lxc_template', 'proxmox_lxc_storage']:
         group_name = 'Proxmox LXC'
-    elif name in ['proxmox_node', 'proxmox_vmid', 'proxmox_vm_storage', 'proxmox_vm_type', 'proxmox_public_ssh_key']:
+    elif name in ['proxmox_node', 'proxmox_vmid', 'proxmox_vm_type', 'proxmox_public_ssh_key']:
         group_name = 'Proxmox (common)'
 
         if name == 'proxmox_vm_type':
             weight = 200
         elif name == 'proxmox_vmid':
             weight = 300
-        elif name == 'proxmox_vm_storage':
-            weight = 400
         elif name == 'proxmox_public_ssh_key':
             weight = 500
     else:
         group_name = 'Proxmox VM'
 
-    if name in ['proxmox_node', 'proxmox_vm_storage', 'proxmox_vm_template', 'proxmox_lxc_template', 'proxmox_vm_type']:
+    if name in ['proxmox_node', 'proxmox_vm_storage', 'proxmox_lxc_storage', 'proxmox_vm_template', 'proxmox_lxc_template', 'proxmox_vm_type']:
         object_types = ['virtualization.virtualmachine']
         input_type = {'value': 'select', 'label': 'Selection'}
     elif name in ['proxmox_disk_storage_volume']:
@@ -196,6 +197,7 @@ if __name__ == "__main__":
     create_lxc_templates = False
     netbox_field_choice_sets_vms_templates_id = 0
     netbox_field_choice_sets_lxc_templates_id = 0
+    netbox_field_choice_sets_lxc_storage_volumes_id = 0
 
     args = get_arguments()
 
@@ -275,6 +277,7 @@ if __name__ == "__main__":
         netbox_field_choice_sets_vms_templates_id = create_custom_field_choice_sets_proxmox_vm_templates(p, nb_options)
 
     netbox_field_choice_sets_vm_storage_volumes_id = create_custom_field_choice_sets_proxmox_vm_storage(p, nb_options)
+    netbox_field_choice_sets_lxc_storage_volumes_id = create_custom_field_choice_sets_proxmox_lxc_storage(p, nb_options)
 
     if create_lxc_templates:
         for n in p.proxmox_nodes:
@@ -308,7 +311,10 @@ if __name__ == "__main__":
     custom_field_proxmox_disk_storage_volume_id = create_custom_field(netbox_url, netbox_api_token, nb_options, 'proxmox_disk_storage_volume', 'Proxmox Disk Storage Volume', netbox_field_choice_sets_vm_storage_volumes_id, p.proxmox_storage_volumes[0])
 
     # proxmox_vm_storage
-    custom_field_proxmox_disk_storage_volume_id = create_custom_field(netbox_url, netbox_api_token, nb_options, 'proxmox_vm_storage', 'Proxmox VM Storage', netbox_field_choice_sets_vm_storage_volumes_id, p.proxmox_storage_volumes[0])
+    custom_field_proxmox_vm_storage_id = create_custom_field(netbox_url, netbox_api_token, nb_options, 'proxmox_vm_storage', 'Proxmox VM Storage', netbox_field_choice_sets_vm_storage_volumes_id, p.proxmox_storage_volumes[0])
+
+    # proxmox_lxc_storage
+    custom_field_proxmox_lxc_storage_id = create_custom_field(netbox_url, netbox_api_token, nb_options, 'proxmox_lxc_storage', 'Proxmox LXC Storage', netbox_field_choice_sets_lxc_storage_volumes_id, p.proxmox_lxc_storage_volumes[0])
 
     # proxmox_vm_type
     custom_field_proxmox_vm_type = create_custom_field(netbox_url, netbox_api_token, nb_options, 'proxmox_vm_type', 'Proxmox VM Type', netbox_field_choice_sets_proxmox_vm_types_id, 'vm')

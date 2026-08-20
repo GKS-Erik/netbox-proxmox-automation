@@ -112,7 +112,8 @@ def netbox_create_vm(nb_url = None, nb_api_token = None, nb_options = {}, proxmo
                 create_vm_config['custom_fields']['proxmox_public_ssh_key'] = vm_configuration['public_ssh_key']
 
             if 'storage' in vm_configuration:
-                create_vm_config['custom_fields']['proxmox_vm_storage'] = vm_configuration['storage']
+                storage_field = 'proxmox_lxc_storage' if 'is_lxc' in vm_configuration else 'proxmox_vm_storage'
+                create_vm_config['custom_fields'][storage_field] = vm_configuration['storage']
 
             if 'vmid' in vm_configuration:
                 create_vm_config['custom_fields']['proxmox_vmid'] = vm_configuration['vmid']

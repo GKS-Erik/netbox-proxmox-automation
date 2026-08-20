@@ -63,6 +63,7 @@ class VmCustomFields(BaseModel):
     proxmox_vm_template: OptionalInt = None
     proxmox_lxc_template: str | None = None
     proxmox_vm_storage: str | None = None
+    proxmox_lxc_storage: str | None = None
     proxmox_public_ssh_key: str | None = None
 
     @field_validator("proxmox_vm_type", mode="before")

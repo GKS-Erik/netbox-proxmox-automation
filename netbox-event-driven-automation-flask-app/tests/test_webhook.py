@@ -80,6 +80,19 @@ class WebhookParsingTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             parse_webhook(payload)
 
+    def test_parses_separate_lxc_storage_field(self):
+        payload = vm_payload(
+            custom_fields={
+                "proxmox_vm_type": "lxc",
+                "proxmox_lxc_template": "local:vztmpl/debian.tar.zst",
+                "proxmox_lxc_storage": "local-lvm",
+            }
+        )
+
+        event = parse_webhook(payload)
+
+        self.assertEqual(event.data.custom_fields.proxmox_lxc_storage, "local-lvm")
+
 
 if __name__ == "__main__":
     unittest.main()

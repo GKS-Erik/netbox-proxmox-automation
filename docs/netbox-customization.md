@@ -76,7 +76,12 @@ Then verify that everything has been created.  In the end, you should have Custo
   - proxmox_vm_storage:
       - Object types: Virtual Machine
       - Label: Proxmox VM Storage
-      - Group name: Proxmox (common)
+      - Group name: Proxmox VM
+      - Type: Selection
+  - proxmox_lxc_storage:
+      - Object types: Virtual Machine
+      - Label: Proxmox LXC Storage
+      - Group name: Proxmox LXC
       - Type: Selection
   - proxmox_public_ssh_key:
       -  Object types: Virtual Machine
@@ -108,8 +113,11 @@ And you have Custom Field Choices for the following:
       - Choices: "discovered" available Proxmox LXC images
       - Default: first "discovered" Proxmox LXC image
   - proxmox-vm-storage: used by `proxmox_vm_storage` custom field
-      - Choices: "discovered" Proxmox storage volumes
+      - Choices: Proxmox storage with Disk Image (`images`) content enabled
       - Default: first "discovered" Proxmox storage volume
+  - proxmox-lxc-storage: used by `proxmox_lxc_storage` custom field
+      - Choices: Proxmox storage with Container (`rootdir`) content enabled
+      - Default: first "discovered" Proxmox LXC storage volume
   - proxmox-vm-templates: used by `proxmox_vm_template` custom field
       - Choices: "discovered" Proxmox VM templates
       - Default: first "discovered" Proxmox VM template, based on lowest discovered vmid

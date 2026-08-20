@@ -20,6 +20,7 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
         self.proxmox_lxc = {}
         self.proxmox_storage_volumes = []
         self.proxmox_lxc_storage_volumes = []
+        self.proxmox_lxc_template_storage_volumes = []
 
         self.__proxmox_collect_vms()
 
@@ -79,14 +80,38 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
 
     def proxmox_get_vm_storage_volumes(self):
         try:
+            self.proxmox_storage_volumes = []
+            self.proxmox_lxc_storage_volumes = []
+            self.proxmox_lxc_template_storage_volumes = []
+
             for proxmox_storage in self.proxmox_api.storage.get():
-                if proxmox_storage['type'] != 'dir':
-                    self.proxmox_storage_volumes.append(proxmox_storage['storage'])
-                else:
-                    if re.search(r'vztmpl', proxmox_storage['content']):
-                        self.proxmox_lxc_storage_volumes.append(proxmox_storage['storage'])
+                supported_content = {
+                    content.strip()
+                    for content in proxmox_storage.get('content', '').split(',')
+                }
+                storage_name = proxmox_storage['storage']
+
+                if 'images' in supported_content:
+                    self.proxmox_storage_volumes.append(storage_name)
+                if 'rootdir' in supported_content:
+                    self.proxmox_lxc_storage_volumes.append(storage_name)
+                if 'vztmpl' in supported_content:
+                    self.proxmox_lxc_template_storage_volumes.append(storage_name)
+
+            self.proxmox_storage_volumes.sort()
+            self.proxmox_lxc_storage_volumes.sort()
+            self.proxmox_lxc_template_storage_volumes.sort()
         except requests.exceptions.RequestException as e:
             raise requests.exceptions.RequestException(e)
+
+        return self.proxmox_storage_volumes
+
+
+    def proxmox_get_lxc_storage_volumes(self):
+        if not self.proxmox_lxc_storage_volumes:
+            self.proxmox_get_vm_storage_volumes()
+
+        return self.proxmox_lxc_storage_volumes
 
 
     def proxmox_check_if_vm_exists(self, vm_name = None):
@@ -202,13 +227,15 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
         return proxmox_vm_configurations
 
 
-    def proxmox_get_lxc_storage_volumes(self):
-        if not self.proxmox_lxc_storage_volumes:
+    def proxmox_get_lxc_template_storage_volumes(self):
+        if not self.proxmox_lxc_template_storage_volumes:
             self.proxmox_get_vm_storage_volumes()
 
     
     def proxmox_get_lxc_templates(self, proxmox_node = None):
-        for lxc_storage in self.proxmox_lxc_storage_volumes:
+        self.proxmox_get_lxc_template_storage_volumes()
+
+        for lxc_storage in self.proxmox_lxc_template_storage_volumes:
             method = getattr(self.proxmox_api.nodes(proxmox_node).storage, lxc_storage)
             local_storage = method.content.get()
 
