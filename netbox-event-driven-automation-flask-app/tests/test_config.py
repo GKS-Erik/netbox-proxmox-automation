@@ -47,6 +47,18 @@ class ConfigTests(unittest.TestCase):
             "Proxmox templates",
         )
 
+    def test_storage_choice_sets_have_default_names(self):
+        config = AppConfig.model_validate(self.config_payload())
+
+        self.assertEqual(
+            config.netbox_api_config.proxmox_vm_storage_choice_set_name,
+            "proxmox-vm-storage",
+        )
+        self.assertEqual(
+            config.netbox_api_config.proxmox_lxc_storage_choice_set_name,
+            "proxmox-lxc-storage",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

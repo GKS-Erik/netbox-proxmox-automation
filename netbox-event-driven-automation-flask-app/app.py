@@ -17,7 +17,7 @@ from clients import GuestNotFoundError, NetBoxClient, ProxmoxClient, ProxmoxTask
 from config import AppConfig, load_config
 from logging_utils import log_payload
 from models import parse_webhook
-from services import NoTemplatesFoundError, TemplateSyncService
+from services import NoTemplatesFoundError, StorageSyncService, TemplateSyncService
 from services.vm_service import AutomationService
 
 VERSION = "2026.08.20"
@@ -27,15 +27,19 @@ APP_NAME = "netbox-proxmox-webhook-listener"
 def build_services(
     config: AppConfig,
     debug=False,
-) -> tuple[AutomationService, TemplateSyncService]:
+) -> tuple[AutomationService, TemplateSyncService, StorageSyncService]:
     proxmox = ProxmoxClient(config.proxmox_api_config, debug=debug)
     netbox = NetBoxClient(config.netbox_api_config, debug=debug)
     backends = BackendFactory(proxmox, netbox, config.proxmox_api_config)
-    return AutomationService(backends, netbox), TemplateSyncService(proxmox, netbox)
+    return (
+        AutomationService(backends, netbox),
+        TemplateSyncService(proxmox, netbox),
+        StorageSyncService(proxmox, netbox),
+    )
 
 
 def build_service(config: AppConfig, debug=False) -> AutomationService:
-    service, _ = build_services(config, debug)
+    service, _, _ = build_services(config, debug)
     return service
 
 
@@ -43,19 +47,21 @@ def create_app(
     config: AppConfig | None = None,
     service: AutomationService | None = None,
     template_service: TemplateSyncService | None = None,
+    storage_service: StorageSyncService | None = None,
 ) -> Flask:
     config_path = Path(
         os.environ.get("APP_CONFIG_FILE", Path(__file__).with_name("app_config.yml"))
     )
     config = config or load_config(config_path)
     flask_app = Flask(__name__)
-    if service is None or template_service is None:
-        built_service, built_template_service = build_services(
+    if service is None or template_service is None or storage_service is None:
+        built_service, built_template_service, built_storage_service = build_services(
             config,
             debug=lambda: flask_app.debug,
         )
         service = service or built_service
         template_service = template_service or built_template_service
+        storage_service = storage_service or built_storage_service
     api = Api(
         flask_app,
         version=VERSION,
@@ -67,6 +73,11 @@ def create_app(
 
     template_service.sync_on_startup(
         config.netbox_api_config.proxmox_template_choice_set_name,
+        logger,
+    )
+    storage_service.sync_on_startup(
+        config.netbox_api_config.proxmox_vm_storage_choice_set_name,
+        config.netbox_api_config.proxmox_lxc_storage_choice_set_name,
         logger,
     )
 

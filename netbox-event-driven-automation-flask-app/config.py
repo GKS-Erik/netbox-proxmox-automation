@@ -34,6 +34,14 @@ class NetBoxConfig(BaseModel):
         default="Proxmox templates",
         min_length=1,
     )
+    proxmox_vm_storage_choice_set_name: str = Field(
+        default="proxmox-vm-storage",
+        min_length=1,
+    )
+    proxmox_lxc_storage_choice_set_name: str = Field(
+        default="proxmox-lxc-storage",
+        min_length=1,
+    )
 
     @property
     def url(self) -> str:

@@ -10,6 +10,7 @@ from proxmoxer import ProxmoxAPI
 from config import ProxmoxConfig
 from logging_utils import log_payload
 from models.templates import ProxmoxTemplate
+from models.storage import ProxmoxStorage
 from models.webhook import GuestKind
 
 
@@ -92,6 +93,23 @@ class ProxmoxClient:
             if resource.get("type") == "qemu" and bool(resource.get("template"))
         ]
         return sorted(templates, key=lambda template: template.vmid)
+
+    def list_storages(self) -> list[ProxmoxStorage]:
+        self._log("Proxmox request storage inventory", {})
+        resources = self.api.storage.get()
+        self._log("Proxmox response storage inventory", resources)
+        storages = [
+            ProxmoxStorage(
+                name=resource["storage"],
+                content=frozenset(
+                    content.strip()
+                    for content in resource.get("content", "").split(",")
+                    if content.strip()
+                ),
+            )
+            for resource in resources
+        ]
+        return sorted(storages, key=lambda storage: storage.name)
 
     def next_vmid(self) -> int:
         self._log("Proxmox request cluster/nextid", {})

@@ -49,3 +49,12 @@ the Proxmox template name. The Choice Set is created when it does not exist.
 The same synchronization is attempted once during application startup. A
 startup synchronization failure is logged but does not prevent the webhook
 service from starting, so a later endpoint call can recover it.
+
+## Storage synchronization
+
+During application startup, the service also reads the Proxmox storage
+inventory and synchronizes two configured NetBox Custom Field Choice Sets.
+Storage supporting `images` is added to the VM Storage set, while storage
+supporting `rootdir` is added to the LXC Storage set. The Proxmox storage name
+is used as both the choice value and label. If one category is empty, its
+existing Choice Set is left unchanged and a warning is logged.

@@ -24,4 +24,6 @@ netbox_api_config:
   # Log sanitized NetBox API and incoming webhook payloads, but only in Flask debug mode.
   debug_payloads: false
   proxmox_template_choice_set_name: "Proxmox templates"
+  proxmox_vm_storage_choice_set_name: "proxmox-vm-storage"
+  proxmox_lxc_storage_choice_set_name: "proxmox-lxc-storage"
 
